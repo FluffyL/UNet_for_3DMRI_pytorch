@@ -17,6 +17,7 @@ from predata_LPBA40 import load_dataset,convert_labels,prepare_validation,crop_d
 
 
 RANDOM_SEED = 123
+patch_size = 32
 dataset_dir = '/home/lly/Desktop/intern_Xidian/WM&GM_segmentation/dataset/LPBA40/LPBA40/native_space/'
 croped_dir = '/home/lly/Desktop/intern_Xidian/WM&GM_segmentation/dataset/LPBA40/LPBA40/train_data/'
 s_train = 30#the num of subject used for training
@@ -68,7 +69,6 @@ labels_transform = transforms.Compose([
 	transforms.ToTensor(), 
 	])
 
-#preprocessing(crop the MRI images into 32*32*32 patches)
 
 
 total_train = 0
@@ -124,8 +124,8 @@ for epoch in range(num_epochs):
 		print(' | Batch index:', batch_idx, end='')
 		print(' | Batch size:', labels.size()[0])
 		
-		T1 = T1.view(-1, 1,256,256,124).to(DEVICE)
-		labels = labels.view(-1, 1,256,256,124).to(DEVICE)
+		T1 = T1.view(-1, 1,patch_size,patch_size,patch_size).to(DEVICE)
+		labels = labels.view(-1, 1,patch_size,patch_size,patch_size).to(DEVICE)
 		print('Image shape', T1.shape)
 		print('break minibatch for-loop')
 		break
@@ -271,8 +271,8 @@ def compute_epoch_loss(model, data_loader):
 	with torch.no_grad():
 		for T1, labels in data_loader:
 			print(T1.shape)
-			T1 = T1.view(-1,1,256,256,124).to(DEVICE)
-			labels = labels.view(-1,1,256,256,124).to(DEVICE)
+			T1 = T1.view(-1,1,patch_size,patch_size,patch_size).to(DEVICE)
+			labels = labels.view(-1,1,patch_size,patch_size,patch_size).to(DEVICE)
 			print(T1.shape)
 			logits, probas = model(T1)
 			loss = F.cross_entropy(logits, labels, reduction='sum')
@@ -291,9 +291,9 @@ def compute_accuracy(model, data_loader):
 	with torch.no_grad():
 		for T1, labels in data_loader:
 			print(T1.shape)
-			T1 = T1.view(-1,1,256,256,124).to(DEVICE)
+			T1 = T1.view(-1,1,patch_size,patch_size,patch_size).to(DEVICE)
 			print(T1.shape)
-			labels = labels.view(-1,1,256,256,124).to(DEVICE)
+			labels = labels.view(-1,1,patch_size,patch_size,patch_size).to(DEVICE)
 			logits, probas = model.forward(T1)
 			predicted_labels = torch.argmax(probas, 1)
 			num_examples += labels.size(0)
@@ -312,8 +312,8 @@ for epoch in range(NUM_EPOCHS):
 	model.train()
 	for batch_idx, (T1, labels) in enumerate(train_loader):
 		#features = features.view(-1,28*28).to(DEVICE)
-		T1 = T1.view(-1,1,256,256,124).to(DEVICE)
-		labels = labels.view(-1,1,256,256,124).to(DEVICE)
+		T1 = T1.view(-1,1,patch_size,patch_size,patch_size).to(DEVICE)
+		labels = labels.view(-1,1,patch_size,patch_size,patch_size).to(DEVICE)
             
 		### FORWARD AND BACK PROP
 		logits, probas = model(T1)
@@ -361,6 +361,4 @@ plt.show()
 
 
 print('Test Accuracy: %.2f' % compute_accuracy(model, test_loader))
-print('Test Accuracy: %.2f' % compute_accuracy(model, test_loader))
 '''
-
