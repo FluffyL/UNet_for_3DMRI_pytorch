@@ -12,13 +12,14 @@ import torch.nn.functional as F
 import torch.nn as nn
 import pandas as pd
 
-from predata_LPBA40 import load_dataset,convert_labels,prepare_validation
+from predata_LPBA40 import load_dataset,convert_labels,prepare_validation,crop_data
 
 
 
 RANDOM_SEED = 123
 dataset_dir = '/home/lly/Desktop/intern_Xidian/WM&GM_segmentation/dataset/LPBA40/LPBA40/native_space/'
-
+croped_dir = '/home/lly/Desktop/intern_Xidian/WM&GM_segmentation/dataset/LPBA40/LPBA40/train_data/'
+s_train = 30#the num of subject used for training
 
 if torch.cuda.is_available():
     torch.backends.cudnn.deterministic = True
@@ -29,17 +30,18 @@ DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 class MRIDataset(Dataset):
 	"""loading MRI data"""
-	def __init__(self, dataset_dir, num_s, num_e, img_transform=None, labels_transform=None):
+	def __init__(self, croped_dir, mode, img_transform=None, labels_transform=None):
 		global T1,labels
-		self.dataset_dir = dataset_dir
-		self.T1_index = np.array(range(num_s, num_e + 1))
+		self.croped_dir = croped_dir
+		self.mode = mode
+		self.t_num = t_num
 		#self.labels = convert_labels(labels)
 		self.img_transform = img_transform
 		self.labels_transform = labels_transform
 
 	def __getitem__(self, index):
 
-		[T1,label] = load_dataset(self.dataset_dir,self.T1_index[index])
+		[T1,label] = load_dataset(self.croped_dir, index, self.mode)
 		#if read .hdr files
 		T1 = T1[:,:,:,0]
 		label = label[:,:,:,0]
@@ -66,11 +68,21 @@ labels_transform = transforms.Compose([
 	transforms.ToTensor(), 
 	])
 
+#preprocessing(crop the MRI images into 32*32*32 patches)
 
-BATCH_SIZE = 2
-train_dataset = MRIDataset(dataset_dir = dataset_dir,
-			num_s = 1,
-			num_e = 30,
+
+total_train = 0
+total_test = 0
+for subject_id in range(1,s_train+1):
+	total_train = total_train + crop_data(dataset_dir, croped_dir, subject_id, total_train, mode=0, patch_size=32)
+
+for subject_id in range(s_train+1,41):
+	total_test = total_test + crop_data(dataset_dir, croped_dir, subject_id, total_test, mode=1, patch_size=32)
+
+BATCH_SIZE = 8
+train_dataset = MRIDataset(croped_dir,
+			total_train,
+			mode = 0,
 			img_transform = img_transform,
 			labels_transform = img_transform)
 
@@ -79,9 +91,9 @@ train_loader = DataLoader(dataset=train_dataset,
                           shuffle=True,
                           num_workers=4)
 
-valid_dataset = MRIDataset(dataset_dir = dataset_dir,
-			num_s = 31,
-			num_e = 40,
+valid_dataset = MRIDataset(croped_dir,
+			total_test,
+			mode = 1,
 			img_transform = img_transform,
 			labels_transform = img_transform)
 
@@ -105,7 +117,6 @@ torch.manual_seed(0)
 
 num_epochs = 2
 for epoch in range(num_epochs):
-	print(train_loader)
 
 	for batch_idx, (T1, labels) in enumerate(train_loader):
 
@@ -349,6 +360,7 @@ plt.xlabel('Epoch')
 plt.show()
 
 
+print('Test Accuracy: %.2f' % compute_accuracy(model, test_loader))
 print('Test Accuracy: %.2f' % compute_accuracy(model, test_loader))
 '''
 
