@@ -81,7 +81,6 @@ for subject_id in range(s_train+1,41):
 
 BATCH_SIZE = 8
 train_dataset = MRIDataset(croped_dir,
-			total_train,
 			mode = 0,
 			img_transform = img_transform,
 			labels_transform = img_transform)
@@ -92,7 +91,6 @@ train_loader = DataLoader(dataset=train_dataset,
                           num_workers=4)
 
 valid_dataset = MRIDataset(croped_dir,
-			total_test,
 			mode = 1,
 			img_transform = img_transform,
 			labels_transform = img_transform)
