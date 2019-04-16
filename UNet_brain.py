@@ -12,14 +12,14 @@ import torch.nn.functional as F
 import torch.nn as nn
 import pandas as pd
 
-from predata_LPBA40 import load_dataset,convert_labels,prepare_validation,crop_data
+from predata_LPBA40 import load_dataset,prepare_validation,crop_data,convert_one_hot
 
 
 
 RANDOM_SEED = 123
 patch_size = 32
-dataset_dir = '/home/lly/Desktop/intern_Xidian/WM&GM_segmentation/dataset/LPBA40/LPBA40/native_space/'
-croped_dir = '/home/lly/Desktop/intern_Xidian/WM&GM_segmentation/dataset/LPBA40/LPBA40/train_data/'
+dataset_dir = '/LPBA40/native_space/'
+croped_dir = '/LPBA40/train_data/'
 s_train = 30#the num of subject used for training
 
 if torch.cuda.is_available():
@@ -31,8 +31,8 @@ DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 class MRIDataset(Dataset):
 	"""loading MRI data"""
-	def __init__(self, croped_dir, mode, img_transform=None, labels_transform=None):
-		global T1,labels
+	def __init__(self, croped_dir, mode,t_num, img_transform=None, labels_transform=None):
+
 		self.croped_dir = croped_dir
 		self.mode = mode
 		self.t_num = t_num
@@ -55,7 +55,7 @@ class MRIDataset(Dataset):
 		return T1, label
 
 	def __len__(self):
-		return len(self.T1_index)
+		return self.t_num
 
 
 
@@ -73,6 +73,7 @@ labels_transform = transforms.Compose([
 
 total_train = 0
 total_test = 0
+
 for subject_id in range(1,s_train+1):
 	total_train = total_train + crop_data(dataset_dir, croped_dir, subject_id, total_train, mode=0, patch_size=32)
 
@@ -81,6 +82,7 @@ for subject_id in range(s_train+1,41):
 
 BATCH_SIZE = 8
 train_dataset = MRIDataset(croped_dir,
+			t_num = total_train,
 			mode = 0,
 			img_transform = img_transform,
 			labels_transform = img_transform)
@@ -91,6 +93,7 @@ train_loader = DataLoader(dataset=train_dataset,
                           num_workers=4)
 
 valid_dataset = MRIDataset(croped_dir,
+			t_num = total_test,
 			mode = 1,
 			img_transform = img_transform,
 			labels_transform = img_transform)
@@ -168,6 +171,7 @@ class outconv(nn.Module):
 		x = self.conv(x)
 		return x
 
+
 class down(nn.Module):
 	def __init__(self, in_ch, out_ch):
 		super(down, self).__init__()
@@ -234,10 +238,9 @@ class UNet(nn.Module):
 		self.up3 = up(256, 128)
 		self.up2 = up(128, 64)
 		self.up1 = up(64, 32)
-		self.outc = outconv(32, n_classes)
+		self.up0 = up(32,  n_classes)
 
 	def forward(self, x):
-		print(x.shape)
 		x1 = self.inc(x.float())
 		x2 = self.down1(x1)
 		x3 = self.down2(x2)
@@ -247,15 +250,21 @@ class UNet(nn.Module):
 		x3 = self.up3(x4)
 		x2 = self.up2(x3)
 		x1 = self.up1(x2)
-		x = self.outc(x1)
-		return F.sigmoid(x)
+		x0 = self.up0(x1)
+		s0 = x.size()[2]
+		s1 = x.size()[3]
+		s2 = x.size()[4]
+		self.out = nn.Upsample(size = (s0,s1,s2),mode='trilinear')
+		logists = self.out(x0)
+		probas = F.softmax(logists)
+		return logists,probas
 
 #################################
 ### Model Initialization
 #################################
 torch.manual_seed(RANDOM_SEED)
 
-model = UNet(n_channels=1, n_classes=1)
+model = UNet(n_channels=1, n_classes=4)
 model = model.float()
 
 optimizer = torch.optim.SGD(model.parameters(), lr=0.5,momentum=0.9)
@@ -264,16 +273,63 @@ optimizer = torch.optim.SGD(model.parameters(), lr=0.5,momentum=0.9)
 ### Training
 #################################
 
+def dice_IOU(predict, label):
+	#define loss function
+	alpha = 0.5
+	beta = 0.5
+	
+	ones = np.ones(np.shape(label))
+	num = np.sum(p0*g0)
+	den = num + alpha * np.sum(p0*g1) + beta * np.sum(p1*g0)
+	T = np.sum(num/den)
+	label = label.view(predict.shape[-1])
+	return label-T
+
+def Dice_3D(predict,label):
+	label = convert_one_hot(label)
+	label_num = label.shape
+	predict = predict.detach().numpy()
+	cost = 0 
+	for i in range(label_num[1]):
+		p0 = np.zeros(np.shape(label[:,i,:,:,:]))
+		p0 = label[:,i,:,:,:]
+		ones = np.ones(np.shape(p0))
+		g0 = predict[:,0,:,:,:]
+
+		p_true = p0*g0
+		p_true[p_true < i] = 0
+
+		p_true_ones = np.zeros(np.shape(p_true))
+		p_true_ones[p_true > 0] = 1
+		
+		p_predict = np.zeros(np.shape(p_true))
+		p_predict[p0 - i > 0] = 1
+		p_predict[p0 - i > 1] = 0
+
+		dice = 2*np.sum(p_true)/(np.sum(g0) + np.sum(p_predict))
+		cost = cost + dice
+	return (-1)*cost
+
+def focal_loss(predict, label):
+	gamma = 2
+	alpha = 0.25
+
+	return 0
+						
+
 def compute_epoch_loss(model, data_loader):
 	curr_loss, num_examples = 0., 0
+	loss_func = dice()
 	with torch.no_grad():
 		for T1, labels in data_loader:
-			print(T1.shape)
 			T1 = T1.view(-1,1,patch_size,patch_size,patch_size).to(DEVICE)
 			labels = labels.view(-1,1,patch_size,patch_size,patch_size).to(DEVICE)
-			print(T1.shape)
 			logits, probas = model(T1)
-			loss = F.cross_entropy(logits, labels, reduction='sum')
+			#labels = convert_one_hot(probas)
+			#loss = 0
+			#loss = Dice_3D(probas,labels)/BATCH_SIZE
+			cost = F.cross_entropy(logits, labels)
+			
 			num_examples += labels.size(0)
 			curr_loss += loss
 
@@ -288,9 +344,7 @@ def compute_accuracy(model, data_loader):
 	correct_pred, num_examples = 0, 0
 	with torch.no_grad():
 		for T1, labels in data_loader:
-			print(T1.shape)
 			T1 = T1.view(-1,1,patch_size,patch_size,patch_size).to(DEVICE)
-			print(T1.shape)
 			labels = labels.view(-1,1,patch_size,patch_size,patch_size).to(DEVICE)
 			logits, probas = model.forward(T1)
 			predicted_labels = torch.argmax(probas, 1)
@@ -303,19 +357,20 @@ start_time = time.time()
 minibatch_cost = []
 epoch_cost = []
 
-
 NUM_EPOCHS = 60
 
 for epoch in range(NUM_EPOCHS):
 	model.train()
+	cost = 0
 	for batch_idx, (T1, labels) in enumerate(train_loader):
-		#features = features.view(-1,28*28).to(DEVICE)
 		T1 = T1.view(-1,1,patch_size,patch_size,patch_size).to(DEVICE)
-		labels = labels.view(-1,1,patch_size,patch_size,patch_size).to(DEVICE)
+		#labels = labels.view(-1,patch_size,patch_size,patch_size).to(DEVICE)
+		labels = labels.long().to(DEVICE)
             
 		### FORWARD AND BACK PROP
 		logits, probas = model(T1)
-        
+		
+		#cost = Dice_3D(probas, labels)/BATCH_SIZE
 		cost = F.cross_entropy(logits, labels)
 		optimizer.zero_grad()
         
