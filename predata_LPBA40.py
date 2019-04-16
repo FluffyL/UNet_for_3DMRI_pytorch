@@ -7,8 +7,8 @@ import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
 
-dataset_dir = '/home/lly/Desktop/intern_Xidian/WM&GM_segmentation/dataset/LPBA40/LPBA40/native_space/'
-croped_dir = '/home/lly/Desktop/intern_Xidian/WM&GM_segmentation/dataset/LPBA40/LPBA40/train_data/'
+dataset_dir = '/LPBA40/native_space/'
+croped_dir = '/LPBA40/train_data/'
 
 
 def _float_feature(value):
@@ -115,29 +115,22 @@ def crop_data(dataset_dir, croped_dir, subject_id, total_t, mode, patch_size):
 		
 	return len(patch_ids)
 
-def convert_labels(labels):
+def convert_one_hot(labels):
 	
-	D, H, W, C = labels.shape
-	labels_hist = np.reshape(labels,[D*H*W*C,1])
-	plt.xlim([np.min(labels_hist)-0.5, np.max(labels_hist)+0.5])
+	A,B,C,D,E = labels.shape
+	one_hot = np.zeros([A,3*B,C,D,E])
  
-	plt.hist(labels_hist, bins=4, alpha=0)
-	plt.title('labels hist')
-	plt.xlabel('label')
-	plt.ylabel('frequent')
- 
-	plt.show()
-	for d in range(D):
-		for h in range(H):
-			for w in range(W):
-				for c in range(C):
-					if labels[d,h,w,c] == 2:
-						labels[d,h,w,0] = 1
-					elif labels[d,h,w,c] == 1:
-						labels[d,h,w,0] = 1
-					elif labels[d,h,w,c] == 3:
-						labels[d,h,w,0] = 3
-	return labels
+	for a in range(A):
+		for c in range(C):
+			for d in range(D):
+				for e in range(E):
+					if labels[a,0,c,d,e] == 1:
+						one_hot[a,0,c,d,e] = 1
+					elif labels[a,0,c,d,e] == 2:
+						one_hot[a,1,c,d,e] = 1
+					elif labels[a,0,c,d,e] == 3:
+						one_hot[a,2,c,d,e] = 1
+	return one_hot
 
 
 def prepare_validation(img, patch_size = 32, overlap = 4):
@@ -167,8 +160,4 @@ def prepare_validation(img, patch_size = 32, overlap = 4):
 				patch_ids.append((d, h, w))
 
 	return patch_ids
-
-
-	return patch_ids
-
 
