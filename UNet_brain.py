@@ -74,18 +74,15 @@ total_train = 0
 total_test = 0
 total_predict = 0
 
-#for subject_id in range(1,s_train+1):
-#	total_train = total_train + crop_data(dataset_dir, croped_dir, subject_id, total_train, mode=0, patch_size=32)
+for subject_id in range(1,s_train+1):
+	total_train = total_train + crop_data(dataset_dir, croped_dir, subject_id, total_train, mode=0, patch_size=32)
 
-#for subject_id in range(s_train+1,41):
-#	total_test = total_test + crop_data(dataset_dir, croped_dir, subject_id, total_test, mode=1, patch_size=32)
-
-#for subject_id in range(s_predict):
-#	total_predict = total_predict + crop_data(predict_dir, croped_dir, subject_id, total_test, mode=2, patch_size=32)
+for subject_id in range(s_train+1,41):
+	total_test = total_test + crop_data(dataset_dir, croped_dir, subject_id, total_test, mode=1, patch_size=32)
 
 BATCH_SIZE = 8
 train_dataset = MRIDataset(croped_dir,
-			t_num = 15000,
+			t_num = total_train,
 			mode = 0,
 			img_transform = img_transform,
 			labels_transform = img_transform)
@@ -96,7 +93,7 @@ train_loader = DataLoader(dataset=train_dataset,
                           #num_workers=1)
 
 valid_dataset = MRIDataset(croped_dir,
-			t_num = 5000,
+			t_num = total_test,
 			mode = 1,
 			img_transform = img_transform,
 			labels_transform = img_transform)
@@ -106,14 +103,6 @@ valid_loader = DataLoader(dataset=valid_dataset,
                           shuffle=True)
                           #num_workers=1)
 
-#predict_dataset = PredictDataset(dataset_dir = predict_dir,
-#			t_num = total_predict,
-#			img_transform = None)
-
-#predict_loader = DataLoader(dataset=predict_dataset,
-#                         batch_size=BATCH_SIZE,
-#                        shuffle=True,
-#                          num_workers=4)
 
 torch.manual_seed(0)
 
